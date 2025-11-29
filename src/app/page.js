@@ -64,25 +64,41 @@ const COURSES = [
 // --- COMPONENTS ---
 
 const LoginSelection = ({ onLogin }) => {
-  const [view, setView] = useState('selection'); // 'selection', 'admin', 'company-auth'
+  const [view, setView] = useState('selection'); // 'selection', 'admin', 'company-auth', 'woman-auth'
   const [adminCode, setAdminCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Company Auth State
+  // Auth Form State
   const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // Woman / Job Seeker (Anonymous)
-  const handleWomanLogin = async () => {
+  // Helper to reset form when switching views
+  const switchView = (newView) => {
+    setView(newView);
+    setError('');
+    setEmail('');
+    setPassword('');
+    setAuthMode('login');
+  };
+
+  // Woman / Job Seeker Auth
+  const handleWomanAuth = async (e) => {
+    e.preventDefault();
     setIsLoading(true);
+    setError('');
+
     try {
-      await signInAnonymously(auth);
+      if (authMode === 'register') {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
       onLogin('woman');
     } catch (err) {
       console.error(err);
-      setError("Login failed. Please try again.");
+      handleAuthError(err);
     }
     setIsLoading(false);
   };
@@ -102,17 +118,23 @@ const LoginSelection = ({ onLogin }) => {
       onLogin('company');
     } catch (err) {
       console.error(err);
-      if (err.code === 'auth/operation-not-allowed') {
-        setError("Email/Password auth not enabled in Firebase Console.");
-      } else if (err.code === 'auth/invalid-credential') {
-        setError("Invalid email or password.");
-      } else if (err.code === 'auth/email-already-in-use') {
-        setError("Email already in use. Try logging in.");
-      } else {
-        setError(err.message);
-      }
+      handleAuthError(err);
     }
     setIsLoading(false);
+  };
+
+  const handleAuthError = (err) => {
+    if (err.code === 'auth/operation-not-allowed') {
+      setError("Email/Password auth not enabled in Firebase Console.");
+    } else if (err.code === 'auth/invalid-credential') {
+      setError("Invalid email or password.");
+    } else if (err.code === 'auth/email-already-in-use') {
+      setError("Email already in use. Try logging in.");
+    } else if (err.code === 'auth/weak-password') {
+      setError("Password should be at least 6 characters.");
+    } else {
+      setError(err.message);
+    }
   };
 
   // Admin Login
@@ -149,9 +171,8 @@ const LoginSelection = ({ onLogin }) => {
               
               <div className="space-y-4">
                 <button 
-                  onClick={handleWomanLogin}
-                  disabled={isLoading}
-                  className="w-full group p-6 border-2 border-purple-100 rounded-2xl hover:border-purple-600 hover:bg-purple-50 transition-all duration-300 flex items-center gap-4 text-left disabled:opacity-50"
+                  onClick={() => switchView('woman-auth')}
+                  className="w-full group p-6 border-2 border-purple-100 rounded-2xl hover:border-purple-600 hover:bg-purple-50 transition-all duration-300 flex items-center gap-4 text-left"
                 >
                   <div className="bg-purple-100 p-4 rounded-full group-hover:bg-purple-600 group-hover:text-white transition-colors">
                     <UserCircle size={32} />
@@ -163,7 +184,7 @@ const LoginSelection = ({ onLogin }) => {
                 </button>
 
                 <button 
-                  onClick={() => setView('company-auth')}
+                  onClick={() => switchView('company-auth')}
                   className="w-full group p-6 border-2 border-teal-100 rounded-2xl hover:border-teal-600 hover:bg-teal-50 transition-all duration-300 flex items-center gap-4 text-left"
                 >
                   <div className="bg-teal-100 p-4 rounded-full group-hover:bg-teal-600 group-hover:text-white transition-colors">
@@ -176,7 +197,7 @@ const LoginSelection = ({ onLogin }) => {
                 </button>
                 
                 <button 
-                  onClick={() => setView('admin')}
+                  onClick={() => switchView('admin')}
                   className="w-full mt-4 text-center text-xs text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1"
                 >
                   <UserCog size={12} /> Admin Login
@@ -185,10 +206,66 @@ const LoginSelection = ({ onLogin }) => {
             </div>
           )}
 
+          {/* VIEW: WOMAN AUTH (Login/Register) */}
+          {view === 'woman-auth' && (
+            <div className="animate-fadeIn w-full">
+              <button onClick={() => switchView('selection')} className="text-sm text-gray-500 mb-4 hover:underline flex items-center gap-1">
+                 <ArrowLeft size={14} /> Back to Roles
+              </button>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Job Seeker Portal</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                {authMode === 'login' ? 'Welcome back! Log in to apply.' : 'Create a profile to find jobs.'}
+              </p>
+              
+              <form onSubmit={handleWomanAuth} className="space-y-4">
+                <div>
+                  <label className="label text-gray-700">  Email Address</label>
+                  <input 
+                    type="email" 
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="input-field text-gray-900 bg-white" 
+                    placeholder="  jane@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="label text-gray-700">Password  </label>
+                  <input 
+                    type="password" 
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="input-field text-gray-900 bg-white" 
+                    placeholder="  ••••••••"
+                  />
+                </div>
+
+                {error && <p className="text-red-500 text-sm font-medium bg-red-50 p-2 rounded">{error}</p>}
+                
+                <button type="submit" disabled={isLoading} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition shadow-lg disabled:opacity-50">
+                  {isLoading ? 'Processing...' : (authMode === 'login' ? 'Login' : 'Create Account')}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center text-sm">
+                {authMode === 'login' ? (
+                  <p className="text-gray-600">
+                    New here? <button onClick={() => { setAuthMode('register'); setError(''); }} className="text-purple-600 font-bold hover:underline">Create an account</button>
+                  </p>
+                ) : (
+                  <p className="text-gray-600">
+                    Already have an account? <button onClick={() => { setAuthMode('login'); setError(''); }} className="text-purple-600 font-bold hover:underline">Log in</button>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* VIEW: COMPANY AUTH (Login/Register) */}
           {view === 'company-auth' && (
             <div className="animate-fadeIn w-full">
-              <button onClick={() => { setView('selection'); setError(''); }} className="text-sm text-gray-500 mb-4 hover:underline flex items-center gap-1">
+              <button onClick={() => switchView('selection')} className="text-sm text-gray-500 mb-4 hover:underline flex items-center gap-1">
                  <ArrowLeft size={14} /> Back to Roles
               </button>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Company Portal</h2>
@@ -198,25 +275,25 @@ const LoginSelection = ({ onLogin }) => {
               
               <form onSubmit={handleCompanyAuth} className="space-y-4">
                 <div>
-                  <label className="label text-gray-700">Email Address</label>
+                  <label className="label text-gray-700">Email Address  </label>
                   <input 
                     type="email" 
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="input-field text-gray-900 bg-white" 
-                    placeholder="hr@company.com"
+                    placeholder="  hr@company.com"
                   />
                 </div>
                 <div>
-                  <label className="label text-gray-700">Password</label>
+                  <label className="label text-gray-700">Password  </label>
                   <input 
                     type="password" 
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="input-field text-gray-900 bg-white" 
-                    placeholder="••••••••"
+                    placeholder="  ••••••••"
                   />
                 </div>
 
@@ -244,7 +321,7 @@ const LoginSelection = ({ onLogin }) => {
           {/* VIEW: ADMIN LOGIN */}
           {view === 'admin' && (
             <div className="animate-fadeIn w-full">
-              <button onClick={() => { setView('selection'); setError(''); }} className="text-sm text-gray-500 mb-4 hover:underline flex items-center gap-1">
+              <button onClick={() => switchView('selection')} className="text-sm text-gray-500 mb-4 hover:underline flex items-center gap-1">
                  <ArrowLeft size={14} /> Back to Roles
               </button>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Admin Access</h2>
@@ -252,13 +329,13 @@ const LoginSelection = ({ onLogin }) => {
               
               <form onSubmit={handleAdminLogin} className="space-y-4">
                 <div>
-                  <label className="label text-gray-700">Access Code</label>
+                  <label className="label text-gray-700">Access Code  </label>
                   <input 
                     type="password" 
                     value={adminCode}
                     onChange={(e) => setAdminCode(e.target.value)}
                     className="input-field text-gray-900 bg-white" 
-                    placeholder="Enter code"
+                    placeholder="  Enter code"
                     autoFocus
                     autoComplete="off"
                   />
